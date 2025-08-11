@@ -1,1 +1,3 @@
-/node_modules
+/WPBCRUDLambda/node_modules
+/WPBAPICallLambda/node_modules
+/.DS_Store
