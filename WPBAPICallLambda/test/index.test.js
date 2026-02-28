@@ -79,4 +79,66 @@ describe('handler', () => {
     const sentResults = sendResultsToTelegram.mock.calls[0][0];
     expect(sentResults.map(item => item.id)).toEqual(['offer-7', 'offer-4', 'offer-5', 'offer-2', 'offer-6']);
   });
+
+  it('returns only the first result when newestOfferId is not found in results', async () => {
+    getSearches.mockResolvedValue([
+      {
+        searchId: 'active-3',
+        alias: 'search-3',
+        active: true,
+        newestOffer: { offerId: 'missing-offer', modified: 50 }
+      }
+    ]);
+
+    firstCall.mockResolvedValue([
+      { id: 'new-offer-1', modified_at: 200 },
+      { id: 'new-offer-2', modified_at: 300 }
+    ]);
+
+    await handler();
+
+    expect(updateSearchData).toHaveBeenCalledTimes(1);
+    expect(updateSearchData.mock.calls[0][1].id).toBe('new-offer-1');
+
+    expect(sendResultsToTelegram).toHaveBeenCalledTimes(1);
+    expect(sendResultsToTelegram.mock.calls[0][0]).toEqual([{ id: 'new-offer-1', modified_at: 200 }]);
+  });
+
+  it('does not send results when all items are older than or equal to the last modified date', async () => {
+    getSearches.mockResolvedValue([
+      {
+        searchId: 'active-4',
+        alias: 'search-4',
+        active: true,
+        newestOffer: { offerId: 'known-offer', modified: 500 }
+      }
+    ]);
+
+    firstCall.mockResolvedValue([
+      { id: 'known-offer', modified_at: 500 },
+      { id: 'old-offer', modified_at: 400 }
+    ]);
+
+    await handler();
+
+    expect(updateSearchData).not.toHaveBeenCalled();
+    expect(sendResultsToTelegram).not.toHaveBeenCalled();
+  });
+
+  it('updates and sends when search has no prior newestOffer', async () => {
+    getSearches.mockResolvedValue([
+      { searchId: 'new-search', alias: 'first-time', active: true }
+    ]);
+
+    firstCall.mockResolvedValue([
+      { id: 'first-result', modified_at: 100 }
+    ]);
+
+    await handler();
+
+    expect(updateSearchData).toHaveBeenCalledTimes(1);
+    expect(updateSearchData.mock.calls[0][1].id).toBe('first-result');
+    expect(sendResultsToTelegram).toHaveBeenCalledTimes(1);
+    expect(sendResultsToTelegram.mock.calls[0][0]).toEqual([{ id: 'first-result', modified_at: 100 }]);
+  });
 });
