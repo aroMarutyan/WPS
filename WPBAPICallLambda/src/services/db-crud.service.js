@@ -1,4 +1,4 @@
-import { DynamoDBClient, ScanCommand, PutItemCommand, UpdateItemCommand, DeleteItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, ScanCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { unmarshall, marshall } from '@aws-sdk/util-dynamodb';
 
 const DDB = new DynamoDBClient({region: 'eu-west-1'});
@@ -16,8 +16,7 @@ export async function getSearches() {
 }
 
 export async function updateSearchData(searchId, newestResult) {
-  await updateSearchStringKey(searchId, 'latestOfferId', newestResult.id);
-  await updateSearchStringKey(searchId, 'lastModified', String(newestResult.modified_at));
+  await updateSearchStringKey(searchId, 'newestOffer', remapOffer(newestResult));
 }
 
 async function updateSearchStringKey(searchId, key, value) {
@@ -37,3 +36,16 @@ async function updateSearchStringKey(searchId, key, value) {
   }
 }
 
+function remapOffer(item) {
+  return {
+    imageUrl: item.images[0].urls.small || item.images[0].urls.medium || item.images[0].urls.big,
+    title: item.title,
+    price: item.price.amount,
+    description: item.description,
+    location: { city: item.location.city, region: item.location.region },
+    shipping: item.shipping.user_allows_shipping,
+    link: 'https://es.wallapop.com/item/' + item.web_slug,
+    offerId: item.id,
+    modified: item.modified_at
+  }
+}

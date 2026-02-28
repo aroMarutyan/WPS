@@ -1,42 +1,44 @@
-import { firstCall } from './src/services/api-call.js';
-import { sendResultsToTelegram } from './src/services/telegram-bot.js';
-import { getSearches, updateSearchData } from './src/services/crud.js';
+import { firstCall } from './src/services/api-call.service.js';
+import { sendResultsToTelegram } from './src/services/telegram-bot.service.js';
+import { getSearches, updateSearchData } from './src/services/db-crud.service.js';
+import { ERROR_SEARCHES_ARRAY, displayCurrentInstanceErrors } from './src/services/api-call-error-handler.service.js';
+
+const MAX_NUMBER_OF_RESULTS = 5;
 
 export const handler = async () => {
 
   const searches = (await getSearches()).filter(search => search.active);
 
-  for await (const search of searches) {
+  for (const search of searches) {
     const results = await firstCall(search);
     await handleResults(search, results);
   }
 
-  finalizeLambda();
+  await displayCurrentInstanceErrors();
+
+  return finalizeLambda();
 };
 
 async function handleResults(search, results) {
-  const newestResults = results.length ? getNewestResults(results, search.latestOfferId, search.lastModified) : [];
+  if (!results.length) return;
+
+  const newestResults = getNewestResults(results, search?.newestOffer?.offerId, search?.newestOffer?.modified);
   
-  if (newestResults.length >= 1) {
+  if (newestResults.length) {
     await updateSearchData(search.searchId, newestResults[0]);
     await sendResultsToTelegram(newestResults);
   }
 }
 
-function getNewestResults(items, newestOfferId, lastModified) {
-  const newestOfferIndex = items.findIndex(item => item?.id === newestOfferId);
+function getNewestResults(results, newestOfferId, lastModified) {
+  if (results.findIndex(result => result?.id === newestOfferId) === -1) return [results[0]];
 
-  if(newestOfferIndex === -1) return [items[0]];
-
-  const newestResults = items
+  const newestResults = results 
     .sort((a, b) => b.modified_at - a.modified_at)
-    .filter(item => item.modified_at >= lastModified)
-    .slice(0, newestOfferIndex);
+    .filter(item => item.modified_at > lastModified)
+    .slice(0, MAX_NUMBER_OF_RESULTS);
 
-  // small precaution
-  const precautionResults = newestResults.length > 5 ? newestResults.slice(5) : newestResults;
-
-  return precautionResults !== [] ? precautionResults : [];
+  return newestResults;
 }
 
 function finalizeLambda() {

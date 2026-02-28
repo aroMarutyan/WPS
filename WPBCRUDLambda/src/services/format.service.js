@@ -1,12 +1,13 @@
 export function formatSearchToHTML(search) {
   const isActive = search.active ? 'Yes' : 'No';
+  const minPrice = search.minPrice ? `\n<b>MIN PRICE:</b> ${search.minPrice}` : '';
+  const maxPrice = search.maxPrice ? `\n<b>MAX PRICE:</b> ${search.maxPrice}` : '';
+  const range = search.range ? `\n<b>RANGE:</b> ${search.range}` : '';
   const condition = Array.from(search?.condition).join(', ');
-  const minSalePrice = search.minSalePrice ? `\n<b>MIN SALE PRICE:</b> ${search.minSalePrice}` : '';
-  const maxSalePrice = search.maxSalePrice ? `\n<b>MAX SALE PRICE:</b> ${search.maxSalePrice}` : '';
   const conditionText = `\n<b>CONDITION:</b> ${condition ? condition : 'All'}`;
 
   const mainText = `<b>ALIAS:</b> ${search.alias} \n<b>IS ACTIVE:</b> ${isActive} \n<b>SEARCH TERM:</b> ${search.searchTerm} \n<b>SEARCH ID:</b> ${search.searchId}`;
-  const filters = `${minSalePrice} ${maxSalePrice} ${conditionText}`;
+  const filters = `${minPrice} ${maxPrice} ${range} ${conditionText}`;
 
   return `${mainText} ${filters}`;
 }
