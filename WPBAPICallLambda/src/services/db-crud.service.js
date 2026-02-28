@@ -7,11 +7,12 @@ const TABLE_NAME = process.env.TABLE_NAME;
 export async function getSearches() {
   try {
     const data = await DDB.send(new ScanCommand({ TableName: TABLE_NAME, ConsistentRead: true }));
-    const rempappedData = data.Items.map(search => unmarshall(search));
+    const remappedData = data.Items.map(search => unmarshall(search));
 
-    return rempappedData;
+    return remappedData;
   } catch(e) {
     console.log('Could not get searches', e);
+    throw e;
   }
 }
 
@@ -33,6 +34,7 @@ async function updateSearchStringKey(searchId, key, value) {
     await DDB.send(new UpdateItemCommand(searchToEdit));
   } catch(e) {
     console.log('Error updating search', e);
+    throw e;
   }
 }
 
