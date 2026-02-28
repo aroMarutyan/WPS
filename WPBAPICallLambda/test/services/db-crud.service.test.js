@@ -90,4 +90,34 @@ describe('db-crud-service', () => {
     expect(UpdateItemCommand).toHaveBeenCalledTimes(1);
     expect(__mocks.send).toHaveBeenCalledTimes(1);
   });
+
+  it('throws when DynamoDB scan fails in getSearches', async () => {
+    const { __mocks } = await import('@aws-sdk/client-dynamodb');
+    const { getSearches } = await import('../../src/services/db-crud.service.js');
+
+    __mocks.send.mockRejectedValue(new Error('ddb down'));
+
+    await expect(getSearches()).rejects.toThrow('ddb down');
+  });
+
+  it('throws when DynamoDB update fails in updateSearchData', async () => {
+    const { __mocks } = await import('@aws-sdk/client-dynamodb');
+    const { updateSearchData } = await import('../../src/services/db-crud.service.js');
+
+    __mocks.send.mockRejectedValue(new Error('update failed'));
+
+    const newestResult = {
+      id: 'offer-1',
+      web_slug: 'slug',
+      title: 'T',
+      description: 'D',
+      modified_at: 1,
+      images: [{ urls: { small: 'img', medium: '', big: '' } }],
+      price: { amount: 10 },
+      location: { city: 'C', region: 'R' },
+      shipping: { user_allows_shipping: false }
+    };
+
+    await expect(updateSearchData('s1', newestResult)).rejects.toThrow('update failed');
+  });
 });

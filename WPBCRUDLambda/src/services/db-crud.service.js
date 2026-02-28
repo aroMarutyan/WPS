@@ -20,7 +20,7 @@ export async function listSearches(text) {
       return;
     }
 
-    for await (const search of searchesToShow) {
+    for (const search of searchesToShow) {
       await botResponseHTML(formatSearchToHTML(search));
     }
 
@@ -125,6 +125,7 @@ async function getAllSearches() {
     return data.Items.map(search => unmarshall(search));
   } catch(e) {
     console.log('Error getting all searches', e);
+    throw e;
   }
 }
 
@@ -137,5 +138,6 @@ async function getSpecificSearch(searchId) {
   } catch(e) {
     console.log('Error fetching search', e);
     await botResponse('Error fetching search');
+    throw e;
   }
 }

@@ -4,7 +4,7 @@ const BOT = new TelegramBot(process.env.TOKEN);
 const CHAT_ID = process.env.CHAT_ID;
 
 export async function sendResultsToTelegram(newestResults) {
-  for await (const result of newestResults) {
+  for (const result of newestResults) {
     await botResponseHTML(buildTelegramResponse(result));
     await asyncTimeout();
   }
