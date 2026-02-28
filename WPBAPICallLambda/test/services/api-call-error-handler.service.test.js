@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./telegram-bot.service.js', () => ({
+vi.mock('../../src/services/telegram-bot.service.js', () => ({
   botResponseHTML: vi.fn()
 }));
 
-import { botResponseHTML } from './telegram-bot.service.js';
+import { botResponseHTML } from '../../src/services/telegram-bot.service.js';
 import {
   ERROR_SEARCHES_ARRAY,
   createErrorSearchEntry,
   displayCurrentInstanceErrors
-} from './api-call-error-handler.service.js';
+} from '../../src/services/api-call-error-handler.service.js';
 
 describe('api-call-error-handler', () => {
   beforeEach(() => {

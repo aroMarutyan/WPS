@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { firstCall } from './api-call.service.js';
-import { ERROR_SEARCHES_ARRAY } from './api-call-error-handler.service.js';
+import { firstCall } from '../../src/services/api-call.service.js';
+import { ERROR_SEARCHES_ARRAY } from '../../src/services/api-call-error-handler.service.js';
 
 const createSearch = (overrides = {}) => ({
   alias: 'mountain-bike',

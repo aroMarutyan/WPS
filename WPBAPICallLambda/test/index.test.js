@@ -1,25 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./src/services/api-call.service.js', () => ({
+vi.mock('../src/services/api-call.service.js', () => ({
   firstCall: vi.fn()
 }));
-vi.mock('./src/services/telegram-bot.service.js', () => ({
+vi.mock('../src/services/telegram-bot.service.js', () => ({
   sendResultsToTelegram: vi.fn()
 }));
-vi.mock('./src/services/db-crud.service.js', () => ({
+vi.mock('../src/services/db-crud.service.js', () => ({
   getSearches: vi.fn(),
   updateSearchData: vi.fn()
 }));
-vi.mock('./src/services/api-call-error-handler.service.js', () => ({
+vi.mock('../src/services/api-call-error-handler.service.js', () => ({
   ERROR_SEARCHES_ARRAY: [],
   displayCurrentInstanceErrors: vi.fn()
 }));
 
-import { handler } from './index.js';
-import { firstCall } from './src/services/api-call.service.js';
-import { getSearches, updateSearchData } from './src/services/db-crud.service.js';
-import { sendResultsToTelegram } from './src/services/telegram-bot.service.js';
-import { displayCurrentInstanceErrors } from './src/services/api-call-error-handler.service.js';
+import { handler } from '../index.js';
+import { firstCall } from '../src/services/api-call.service.js';
+import { getSearches, updateSearchData } from '../src/services/db-crud.service.js';
+import { sendResultsToTelegram } from '../src/services/telegram-bot.service.js';
+import { displayCurrentInstanceErrors } from '../src/services/api-call-error-handler.service.js';
 
 describe('handler', () => {
   beforeEach(() => {

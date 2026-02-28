@@ -18,7 +18,7 @@ describe('telegram-bot-service', () => {
   });
 
   it('sends plain and HTML responses to configured chat', async () => {
-    const { botResponse, botResponseHTML } = await import('./telegram-bot.service.js');
+    const { botResponse, botResponseHTML } = await import('../../src/services/telegram-bot.service.js');
 
     await botResponse('plain text');
     await botResponseHTML('html text');
@@ -28,7 +28,7 @@ describe('telegram-bot-service', () => {
   });
 
   it('formats and sends each result as HTML', async () => {
-    const { sendResultsToTelegram } = await import('./telegram-bot.service.js');
+    const { sendResultsToTelegram } = await import('../../src/services/telegram-bot.service.js');
 
     const results = [
       {

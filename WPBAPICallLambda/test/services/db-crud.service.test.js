@@ -35,7 +35,7 @@ describe('db-crud-service', () => {
   it('scans searches and unmarshalls returned items', async () => {
     const { __mocks, ScanCommand } = await import('@aws-sdk/client-dynamodb');
     const { unmarshall } = await import('@aws-sdk/util-dynamodb');
-    const { getSearches } = await import('./db-crud.service.js');
+    const { getSearches } = await import('../../src/services/db-crud.service.js');
 
     __mocks.send.mockResolvedValue({
       Items: [{ searchId: 'a' }, { searchId: 'b' }]
@@ -57,7 +57,7 @@ describe('db-crud-service', () => {
   it('updates newest offer field with remapped offer data', async () => {
     const { __mocks, UpdateItemCommand } = await import('@aws-sdk/client-dynamodb');
     const { marshall } = await import('@aws-sdk/util-dynamodb');
-    const { updateSearchData } = await import('./db-crud.service.js');
+    const { updateSearchData } = await import('../../src/services/db-crud.service.js');
 
     const newestResult = {
       id: 'offer-1',
