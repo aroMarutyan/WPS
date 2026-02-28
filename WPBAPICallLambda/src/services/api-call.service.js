@@ -47,7 +47,7 @@ async function callNextPage(nextPage, searchAlias, counter = 0) {
     } 
   } catch(e) {
     console.log('Next page call failed', e);
-    const errorEntry = createErrorSearchEntry(search.alias, 'next page call');
+    const errorEntry = createErrorSearchEntry(searchAlias, 'next page call');
     ERROR_SEARCHES_ARRAY.push(errorEntry);
     return [];
   }
