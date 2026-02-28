@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sendMessage = vi.fn();
 
@@ -15,6 +15,10 @@ describe('telegram-bot-service', () => {
     vi.useFakeTimers();
     process.env.TOKEN = 'token';
     process.env.CHAT_ID = 'chat-id';
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('sends plain and HTML responses to configured chat', async () => {

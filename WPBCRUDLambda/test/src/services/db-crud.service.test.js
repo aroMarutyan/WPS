@@ -164,4 +164,60 @@ describe('db-crud.service', () => {
 
     expect(botResponse).toHaveBeenCalledWith(expect.stringContaining('Error getting the list of searches'));
   });
+
+  it('lists all searches when activeOnly is not specified', async () => {
+    const { __mocks } = await import('@aws-sdk/client-dynamodb');
+    const { botResponseHTML } = await import('../../../src/services/telegram-bot.service.js');
+    const { formatSearchToHTML } = await import('../../../src/services/format.service.js');
+    const { listSearches } = await import('../../../src/services/db-crud.service.js');
+
+    __mocks.send.mockResolvedValue({
+      Items: [{ active: true, alias: 's1' }, { active: false, alias: 's2' }]
+    });
+
+    await listSearches('/ls');
+
+    expect(botResponseHTML).toHaveBeenCalledTimes(2);
+    expect(formatSearchToHTML).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends error response when creating a search fails', async () => {
+    const { __mocks } = await import('@aws-sdk/client-dynamodb');
+    const { botResponse } = await import('../../../src/services/telegram-bot.service.js');
+    const { createNewSearch } = await import('../../../src/services/db-crud.service.js');
+
+    __mocks.send.mockRejectedValue(new Error('put failed'));
+
+    await createNewSearch('/ns\nalias\nterm');
+
+    expect(botResponse).toHaveBeenCalledWith(expect.stringContaining('Error adding new search'));
+  });
+
+  it('sends error response when updating a search fails', async () => {
+    const { __mocks } = await import('@aws-sdk/client-dynamodb');
+    const { botResponse } = await import('../../../src/services/telegram-bot.service.js');
+    const { updateSearch } = await import('../../../src/services/db-crud.service.js');
+
+    __mocks.send
+      .mockResolvedValueOnce({ Items: [{ searchId: '44' }] })
+      .mockRejectedValueOnce(new Error('update failed'));
+
+    await updateSearch('/us\n44\nalias\nnew-name');
+
+    expect(botResponse).toHaveBeenCalledWith(expect.stringContaining('Error updating search'));
+  });
+
+  it('sends error response when deleting a search fails', async () => {
+    const { __mocks } = await import('@aws-sdk/client-dynamodb');
+    const { botResponse } = await import('../../../src/services/telegram-bot.service.js');
+    const { deleteSearch } = await import('../../../src/services/db-crud.service.js');
+
+    __mocks.send
+      .mockResolvedValueOnce({ Items: [{ searchId: '88' }] })
+      .mockRejectedValueOnce(new Error('delete failed'));
+
+    await deleteSearch('/ds\n88');
+
+    expect(botResponse).toHaveBeenCalledWith(expect.stringContaining('Error deleting search'));
+  });
 });

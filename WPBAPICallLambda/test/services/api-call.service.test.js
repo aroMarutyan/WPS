@@ -110,4 +110,65 @@ describe('firstCall', () => {
     expect(ERROR_SEARCHES_ARRAY[0]).toMatchObject({ alias: 'mountain-bike', errorType: 'fetch', errorCode: 500 });
     expect(ERROR_SEARCHES_ARRAY[1]).toMatchObject({ alias: 'mountain-bike', errorType: 'first call', errorCode: 'N/A' });
   });
+
+  it('returns empty array when first page has no items and no next page', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: { section: { payload: { items: [] } } },
+        meta: { next_page: null }
+      })
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await firstCall(createSearch({ condition: new Set(['']) }));
+
+    expect(result).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('records next page call error when a subsequent page fetch fails', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          data: { section: { payload: { items: [] } } },
+          meta: { next_page: 'page-1' }
+        })
+      })
+      .mockResolvedValueOnce({ ok: false, status: 429 });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await firstCall(createSearch({ condition: new Set(['']) }));
+
+    expect(result).toEqual([]);
+    expect(ERROR_SEARCHES_ARRAY.length).toBeGreaterThanOrEqual(1);
+    const nextPageError = ERROR_SEARCHES_ARRAY.find(e => e.errorType === 'next page call');
+    expect(nextPageError).toBeDefined();
+    expect(nextPageError.alias).toBe('mountain-bike');
+  });
+
+  it('omits optional URL params when search has no minPrice, maxPrice, or range', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        data: { section: { payload: { items: [{ id: '1' }] } } },
+        meta: { next_page: null }
+      })
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const search = createSearch({ minPrice: '', maxPrice: '', range: '', condition: new Set(['']) });
+    await firstCall(search);
+
+    const calledUrl = fetchMock.mock.calls[0][0];
+    expect(calledUrl.searchParams.get('min_sale_price')).toBeNull();
+    expect(calledUrl.searchParams.get('max_sale_price')).toBeNull();
+    expect(calledUrl.searchParams.get('distance_in_km')).toBeNull();
+    expect(calledUrl.searchParams.get('condition')).toBeNull();
+  });
 });
