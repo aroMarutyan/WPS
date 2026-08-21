@@ -1,0 +1,132 @@
+# Deploy Lambda packages to AWS S3
+#
+# Required GitHub repository configuration:
+#
+#   Secrets:
+#     AWS_ROLE_ARN        – ARN of the IAM role to assume via OIDC
+#                           e.g. arn:aws:iam::123456789012:role/wps-github-deploy
+#
+#   Variables:
+#     AWS_REGION          – AWS region where the S3 bucket lives, e.g. eu-west-1
+#     S3_BUCKET           – Name of the S3 bucket to upload packages into
+#                           e.g. my-wps-deployments
+#
+# IAM trust relationship (attach to the role referenced by AWS_ROLE_ARN):
+#
+#   {
+#     "Version": "2012-10-17",
+#     "Statement": [
+#       {
+#         "Effect": "Allow",
+#         "Principal": { "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com" },
+#         "Action": "sts:AssumeRoleWithWebIdentity",
+#         "Condition": {
+#           "StringEquals": {
+#             "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+#             "token.actions.githubusercontent.com:sub": "repo:aroMarutyan/WPS:ref:refs/heads/master"
+#           }
+#         }
+#       }
+#     ]
+#   }
+#
+# Minimum IAM permissions policy to attach to the role:
+#
+#   {
+#     "Version": "2012-10-17",
+#     "Statement": [
+#       {
+#         "Effect": "Allow",
+#         "Action": ["s3:PutObject", "s3:PutObjectAcl"],
+#         "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/*"
+#       }
+#     ]
+#   }
+
+name: Deploy to AWS S3
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Package and deploy Lambda functions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate required configuration
+        run: |
+          missing=()
+          [ -z "${{ secrets.AWS_ROLE_ARN }}" ]  && missing+=("secret AWS_ROLE_ARN")
+          [ -z "${{ vars.AWS_REGION }}" ]        && missing+=("variable AWS_REGION")
+          [ -z "${{ vars.S3_BUCKET }}" ]         && missing+=("variable S3_BUCKET")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "ERROR: The following required values are not set:"
+            printf '  - %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install WPBCRUDLambda dependencies
+        working-directory: WPBCRUDLambda
+        run: npm ci --omit=dev
+
+      - name: Install WPBAPICallLambda dependencies
+        working-directory: WPBAPICallLambda
+        run: npm ci --omit=dev
+
+      - name: Package WPBCRUDLambda
+        run: |
+          zip -r /tmp/WPBCRUDLambda.zip WPBCRUDLambda \
+            --exclude "WPBCRUDLambda/test/*" \
+            --exclude "WPBCRUDLambda/package-lock.json"
+          echo "Packaged WPBCRUDLambda:"
+          ls -lh /tmp/WPBCRUDLambda.zip
+
+      - name: Package WPBAPICallLambda
+        run: |
+          zip -r /tmp/WPBAPICallLambda.zip WPBAPICallLambda \
+            --exclude "WPBAPICallLambda/test/*" \
+            --exclude "WPBAPICallLambda/package-lock.json"
+          echo "Packaged WPBAPICallLambda:"
+          ls -lh /tmp/WPBAPICallLambda.zip
+
+      - name: Verify packages exist
+        run: |
+          for pkg in /tmp/WPBCRUDLambda.zip /tmp/WPBAPICallLambda.zip; do
+            if [ ! -f "$pkg" ]; then
+              echo "ERROR: Expected package not found: $pkg"
+              exit 1
+            fi
+          done
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Upload packages to S3
+        run: |
+          TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
+          COMMIT_SHA="${{ github.sha }}"
+
+          for pkg in WPBCRUDLambda WPBAPICallLambda; do
+            aws s3 cp "/tmp/${pkg}.zip" \
+              "s3://${{ vars.S3_BUCKET }}/${pkg}/${COMMIT_SHA}/${pkg}.zip"
+            echo "Uploaded ${pkg}.zip → s3://${{ vars.S3_BUCKET }}/${pkg}/${COMMIT_SHA}/${pkg}.zip"
+          done

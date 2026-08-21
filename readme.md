@@ -138,6 +138,77 @@ cd ../WPBAPICallLambda && npm test
 - Set identical `TOKEN`, `CHAT_ID`, and `TABLE_NAME` values in both Lambda environments.
 - Ensure IAM permissions allow both Lambdas to read/write the DynamoDB table.
 
+## CI/CD – Automatic Deployment to AWS S3
+
+Every push to `master` triggers the `.github/workflows/deploy.yml` workflow, which:
+
+1. Installs production-only dependencies (`npm ci --omit=dev`) for both Lambdas.
+2. Creates a `.zip` archive for each Lambda function.
+3. Uploads the archives to S3 under `s3://<S3_BUCKET>/<LambdaName>/<commit-sha>/<LambdaName>.zip`.
+
+### Required GitHub Repository Configuration
+
+#### Secrets
+
+| Secret | Description |
+| --- | --- |
+| `AWS_ROLE_ARN` | ARN of the IAM role assumed via GitHub OIDC, e.g. `arn:aws:iam::123456789012:role/wps-github-deploy` |
+
+#### Variables
+
+| Variable | Description |
+| --- | --- |
+| `AWS_REGION` | AWS region of the S3 bucket, e.g. `eu-west-1` |
+| `S3_BUCKET` | Name of the destination S3 bucket, e.g. `my-wps-deployments` |
+
+### Required AWS Configuration
+
+#### 1. GitHub OIDC Identity Provider
+
+Add `token.actions.githubusercontent.com` as an OIDC provider in your AWS account (one-time setup per account). Set the audience to `sts.amazonaws.com`.
+
+#### 2. IAM Role Trust Relationship
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": "repo:aroMarutyan/WPS:ref:refs/heads/master"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### 3. Minimum IAM Permissions Policy
+
+Attach the following policy to the role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:PutObjectAcl"],
+      "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/*"
+    }
+  ]
+}
+```
+
+Replace `YOUR_BUCKET_NAME` with the value stored in the `S3_BUCKET` repository variable.
+
 ## Testing Layout
 
 - `WPBCRUDLambda/test/` covers command handler and service behavior.
