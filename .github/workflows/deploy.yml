@@ -1,132 +1,111 @@
-# Deploy Lambda packages to AWS S3
-#
-# Required GitHub repository configuration:
-#
-#   Secrets:
-#     AWS_ROLE_ARN        – ARN of the IAM role to assume via OIDC
-#                           e.g. arn:aws:iam::123456789012:role/wps-github-deploy
-#
-#   Variables:
-#     AWS_REGION          – AWS region where the S3 bucket lives, e.g. eu-west-1
-#     S3_BUCKET           – Name of the S3 bucket to upload packages into
-#                           e.g. my-wps-deployments
-#
-# IAM trust relationship (attach to the role referenced by AWS_ROLE_ARN):
-#
-#   {
-#     "Version": "2012-10-17",
-#     "Statement": [
-#       {
-#         "Effect": "Allow",
-#         "Principal": { "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com" },
-#         "Action": "sts:AssumeRoleWithWebIdentity",
-#         "Condition": {
-#           "StringEquals": {
-#             "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-#             "token.actions.githubusercontent.com:sub": "repo:aroMarutyan/WPS:ref:refs/heads/master"
-#           }
-#         }
-#       }
-#     ]
-#   }
-#
-# Minimum IAM permissions policy to attach to the role:
-#
-#   {
-#     "Version": "2012-10-17",
-#     "Statement": [
-#       {
-#         "Effect": "Allow",
-#         "Action": ["s3:PutObject", "s3:PutObjectAcl"],
-#         "Resource": "arn:aws:s3:::YOUR_BUCKET_NAME/*"
-#       }
-#     ]
-#   }
-
-name: Deploy to AWS S3
+name: Deploy Lambdas
 
 on:
   push:
-    branches:
-      - master
-  workflow_dispatch:
+    branches: [master]
+    paths:
+      - 'WPBCRUDLambda/**'
+      - 'WPBAPICallLambda/**'
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  deploy:
-    name: Package and deploy Lambda functions
+  changes:
     runs-on: ubuntu-latest
-
+    outputs:
+      crud: ${{ steps.filter.outputs.crud }}
+      apicall: ${{ steps.filter.outputs.apicall }}
     steps:
-      - name: Validate required configuration
-        run: |
-          missing=()
-          [ -z "${{ secrets.AWS_ROLE_ARN }}" ]  && missing+=("secret AWS_ROLE_ARN")
-          [ -z "${{ vars.AWS_REGION }}" ]        && missing+=("variable AWS_REGION")
-          [ -z "${{ vars.S3_BUCKET }}" ]         && missing+=("variable S3_BUCKET")
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "ERROR: The following required values are not set:"
-            printf '  - %s\n' "${missing[@]}"
-            exit 1
-          fi
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
         with:
-          node-version: '18'
+          filters: |
+            crud:
+              - 'WPBCRUDLambda/**'
+            apicall:
+              - 'WPBAPICallLambda/**'
 
-      - name: Install WPBCRUDLambda dependencies
-        working-directory: WPBCRUDLambda
+  deploy-crud:
+    needs: changes
+    if: needs.changes.outputs.crud == 'true'
+    runs-on: ubuntu-latest
+    env:
+      LAMBDA_DIR: WPBCRUDLambda
+      FUNCTION_NAME: WPSDBCRUDLambda
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install production dependencies
+        working-directory: ${{ env.LAMBDA_DIR }}
         run: npm ci --omit=dev
 
-      - name: Install WPBAPICallLambda dependencies
-        working-directory: WPBAPICallLambda
-        run: npm ci --omit=dev
+      - name: Zip package
+        working-directory: ${{ env.LAMBDA_DIR }}
+        run: zip -r ../${{ env.FUNCTION_NAME }}.zip . -x "test/*"
 
-      - name: Package WPBCRUDLambda
-        run: |
-          zip -r /tmp/WPBCRUDLambda.zip WPBCRUDLambda \
-            --exclude "WPBCRUDLambda/test/*" \
-            --exclude "WPBCRUDLambda/package-lock.json"
-          echo "Packaged WPBCRUDLambda:"
-          ls -lh /tmp/WPBCRUDLambda.zip
-
-      - name: Package WPBAPICallLambda
-        run: |
-          zip -r /tmp/WPBAPICallLambda.zip WPBAPICallLambda \
-            --exclude "WPBAPICallLambda/test/*" \
-            --exclude "WPBAPICallLambda/package-lock.json"
-          echo "Packaged WPBAPICallLambda:"
-          ls -lh /tmp/WPBAPICallLambda.zip
-
-      - name: Verify packages exist
-        run: |
-          for pkg in /tmp/WPBCRUDLambda.zip /tmp/WPBAPICallLambda.zip; do
-            if [ ! -f "$pkg" ]; then
-              echo "ERROR: Expected package not found: $pkg"
-              exit 1
-            fi
-          done
-
-      - name: Configure AWS credentials (OIDC)
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - name: Upload packages to S3
-        run: |
-          TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
-          COMMIT_SHA="${{ github.sha }}"
+      - name: Upload to S3
+        run: aws s3 cp ${{ env.FUNCTION_NAME }}.zip s3://wallapop-bot-bucket/${{ env.FUNCTION_NAME }}/${{ github.sha }}.zip
 
-          for pkg in WPBCRUDLambda WPBAPICallLambda; do
-            aws s3 cp "/tmp/${pkg}.zip" \
-              "s3://${{ vars.S3_BUCKET }}/${pkg}/${COMMIT_SHA}/${pkg}.zip"
-            echo "Uploaded ${pkg}.zip → s3://${{ vars.S3_BUCKET }}/${pkg}/${COMMIT_SHA}/${pkg}.zip"
-          done
+      - name: Update Lambda code
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.FUNCTION_NAME }} \
+            --s3-bucket wallapop-bot-bucket \
+            --s3-key ${{ env.FUNCTION_NAME }}/${{ github.sha }}.zip
+
+      - name: Wait for update to complete
+        run: aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }}
+
+  deploy-apicall:
+    needs: changes
+    if: needs.changes.outputs.apicall == 'true'
+    runs-on: ubuntu-latest
+    env:
+      LAMBDA_DIR: WPBAPICallLambda
+      FUNCTION_NAME: wallaScrapAPICallLambda
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install production dependencies
+        working-directory: ${{ env.LAMBDA_DIR }}
+        run: npm ci --omit=dev
+
+      - name: Zip package
+        working-directory: ${{ env.LAMBDA_DIR }}
+        run: zip -r ../${{ env.FUNCTION_NAME }}.zip . -x "test/*"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Upload to S3
+        run: aws s3 cp ${{ env.FUNCTION_NAME }}.zip s3://wallapop-bot-bucket/${{ env.FUNCTION_NAME }}/${{ github.sha }}.zip
+
+      - name: Update Lambda code
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.FUNCTION_NAME }} \
+            --s3-bucket wallapop-bot-bucket \
+            --s3-key ${{ env.FUNCTION_NAME }}/${{ github.sha }}.zip
+
+      - name: Wait for update to complete
+        run: aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }}
