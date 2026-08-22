@@ -21,7 +21,7 @@ export const handler = async () => {
 
 async function handleResults(search, results) {
   if (!results.length) return;
-  console.log('TEST WORKFLOW API CALL - get object in the right place now');
+  console.log('TEST WORKFLOW API CALL - get func config now :(');
 
   const newestResults = getNewestResults(results, search?.newestOffer?.offerId, search?.newestOffer?.modified);
   
