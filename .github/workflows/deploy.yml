@@ -1,0 +1,111 @@
+name: Deploy Lambdas
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'WPBCRUDLambda/**'
+      - 'WPBAPICallLambda/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      crud: ${{ steps.filter.outputs.crud }}
+      apicall: ${{ steps.filter.outputs.apicall }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            crud:
+              - 'WPBCRUDLambda/**'
+            apicall:
+              - 'WPBAPICallLambda/**'
+
+  deploy-crud:
+    needs: changes
+    if: needs.changes.outputs.crud == 'true'
+    runs-on: ubuntu-latest
+    env:
+      LAMBDA_DIR: WPBCRUDLambda
+      FUNCTION_NAME: WPSDBCRUDLambda
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install production dependencies
+        working-directory: ${{ env.LAMBDA_DIR }}
+        run: npm ci --omit=dev
+
+      - name: Zip package
+        working-directory: ${{ env.LAMBDA_DIR }}
+        run: zip -r ../${{ env.FUNCTION_NAME }}.zip . -x "test/*"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Upload to S3
+        run: aws s3 cp ${{ env.FUNCTION_NAME }}.zip s3://wallapop-bot-bucket/${{ env.FUNCTION_NAME }}/${{ github.sha }}.zip
+
+      - name: Update Lambda code
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.FUNCTION_NAME }} \
+            --s3-bucket wallapop-bot-bucket \
+            --s3-key ${{ env.FUNCTION_NAME }}/${{ github.sha }}.zip
+
+      - name: Wait for update to complete
+        run: aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }}
+
+  deploy-apicall:
+    needs: changes
+    if: needs.changes.outputs.apicall == 'true'
+    runs-on: ubuntu-latest
+    env:
+      LAMBDA_DIR: WPBAPICallLambda
+      FUNCTION_NAME: wallaScrapAPICallLambda
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install production dependencies
+        working-directory: ${{ env.LAMBDA_DIR }}
+        run: npm ci --omit=dev
+
+      - name: Zip package
+        working-directory: ${{ env.LAMBDA_DIR }}
+        run: zip -r ../${{ env.FUNCTION_NAME }}.zip . -x "test/*"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Upload to S3
+        run: aws s3 cp ${{ env.FUNCTION_NAME }}.zip s3://wallapop-bot-bucket/${{ env.FUNCTION_NAME }}/${{ github.sha }}.zip
+
+      - name: Update Lambda code
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.FUNCTION_NAME }} \
+            --s3-bucket wallapop-bot-bucket \
+            --s3-key ${{ env.FUNCTION_NAME }}/${{ github.sha }}.zip
+
+      - name: Wait for update to complete
+        run: aws lambda wait function-updated --function-name ${{ env.FUNCTION_NAME }}
