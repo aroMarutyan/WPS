@@ -6,7 +6,6 @@ import { ERROR_SEARCHES_ARRAY, displayCurrentInstanceErrors } from './src/servic
 const MAX_NUMBER_OF_RESULTS = 5;
 
 export const handler = async () => {
-
   const searches = (await getSearches()).filter(search => search.active);
 
   for (const search of searches) {
@@ -21,13 +20,12 @@ export const handler = async () => {
 
 async function handleResults(search, results) {
   if (!results.length) return;
-  console.log('TEST WORKFLOW API CALL - get func config now :(');
 
   const newestResults = getNewestResults(results, search?.newestOffer?.offerId, search?.newestOffer?.modified);
   
   if (newestResults.length) {
-    await updateSearchData(search.searchId, newestResults[0]);
-    await sendResultsToTelegram(newestResults);
+    await updateSearchData(search.searchId, search.chatId, newestResults[0]);
+    await sendResultsToTelegram(search.chatId, newestResults);
   }
 }
 

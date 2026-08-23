@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const CHAT_ID = 'chat-555';
+
 vi.mock('@aws-sdk/client-dynamodb', () => {
   const send = vi.fn();
 
@@ -44,7 +46,7 @@ vi.mock('../../../src/services/format.service.js', () => ({
 
 vi.mock('../../../src/services/search-handler.service.js', () => ({
   getTableName: vi.fn(() => ({ TableName: 'table-name' })),
-  getSearchParams: vi.fn((searchId) => ({ TableName: 'table-name', Key: { searchId } })),
+  getSearchParams: vi.fn((searchId, chatId) => ({ TableName: 'table-name', Key: { searchId, chatId } })),
   handleNewValue: vi.fn((_key, value) => value ?? ''),
   getIdNum: vi.fn(() => '777'),
   handleNumericInput: vi.fn((value) => value ?? ''),
@@ -65,13 +67,29 @@ describe('db-crud.service', () => {
     const { listSearches } = await import('../../../src/services/db-crud.service.js');
 
     __mocks.send.mockResolvedValue({
-      Items: [{ active: false }]
+      Items: [{ active: false, chatId: CHAT_ID }]
     });
 
-    await listSearches('/ls\nactiveOnly');
+    await listSearches('/ls\nactiveOnly', CHAT_ID);
 
-    expect(botResponse).toHaveBeenCalledWith('No active searches found');
+    expect(botResponse).toHaveBeenCalledWith(CHAT_ID, 'No active searches found');
     expect(botResponseHTML).not.toHaveBeenCalled();
+  });
+
+  it('only shows searches belonging to the requesting chat id', async () => {
+    const { __mocks } = await import('@aws-sdk/client-dynamodb');
+    const { formatSearchToHTML } = await import('../../../src/services/format.service.js');
+    const { listSearches } = await import('../../../src/services/db-crud.service.js');
+
+    const mine = { active: true, alias: 'mine', chatId: CHAT_ID };
+    const other = { active: true, alias: 'other', chatId: 'someone-elses-chat' };
+
+    __mocks.send.mockResolvedValue({ Items: [mine, other] });
+
+    await listSearches('/ls', CHAT_ID);
+
+    expect(formatSearchToHTML).toHaveBeenCalledTimes(1);
+    expect(formatSearchToHTML).toHaveBeenCalledWith(mine);
   });
 
   it('fetches newest results for a specific search id', async () => {
@@ -84,14 +102,14 @@ describe('db-crud.service', () => {
       Item: { alias: 'city-bike', newestOffer: { id: 'offer-1' } }
     });
 
-    await getNewestResults('/gl\n44');
+    await getNewestResults('/gl\n44', CHAT_ID);
 
     expect(validateNumericParam).toHaveBeenCalledWith('44', 'searchId');
     expect(buildTelegramResponse).toHaveBeenCalledWith('city-bike', { id: 'offer-1' });
-    expect(botResponseHTML).toHaveBeenCalledWith('<b>city-bike</b>');
+    expect(botResponseHTML).toHaveBeenCalledWith(CHAT_ID, '<b>city-bike</b>');
   });
 
-  it('creates a search and sends confirmation with created search details', async () => {
+  it('creates a search scoped to the chat id and sends confirmation with created search details', async () => {
     const { __mocks, PutItemCommand } = await import('@aws-sdk/client-dynamodb');
     const { marshall } = await import('@aws-sdk/util-dynamodb');
     const { botResponse, botResponseHTML } = await import('../../../src/services/telegram-bot.service.js');
@@ -103,18 +121,19 @@ describe('db-crud.service', () => {
         Item: {
           alias: 'new search',
           searchId: '777',
+          chatId: CHAT_ID,
           searchTerm: 'bike',
           condition: new Set(['new']),
           active: true
         }
       });
 
-    await createNewSearch('/ns\nnew search\nbike\n10\n20\n30\nnew');
+    await createNewSearch('/ns\nnew search\nbike\n10\n20\n30\nnew', CHAT_ID);
 
     expect(PutItemCommand).toHaveBeenCalledTimes(1);
-    expect(marshall).toHaveBeenCalledWith(expect.objectContaining({ alias: 'new search', searchId: '777' }));
-    expect(botResponse).toHaveBeenCalledWith('Search successfully added');
-    expect(botResponseHTML).toHaveBeenCalledWith('<b>search</b>');
+    expect(marshall).toHaveBeenCalledWith(expect.objectContaining({ alias: 'new search', searchId: '777', chatId: CHAT_ID }));
+    expect(botResponse).toHaveBeenCalledWith(CHAT_ID, 'Search successfully added');
+    expect(botResponseHTML).toHaveBeenCalledWith(CHAT_ID, '<b>search</b>');
   });
 
   it('updates a search and sends the updated payload', async () => {
@@ -124,18 +143,19 @@ describe('db-crud.service', () => {
     const { updateSearch } = await import('../../../src/services/db-crud.service.js');
 
     __mocks.send
-      .mockResolvedValueOnce({ Items: [{ searchId: '44' }] })
+      .mockResolvedValueOnce({ Items: [{ searchId: '44', chatId: CHAT_ID }] })
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({
-        Item: { alias: 'edited', searchId: '44', searchTerm: 'bike', condition: new Set(['new']), active: true }
+        Item: { alias: 'edited', searchId: '44', chatId: CHAT_ID, searchTerm: 'bike', condition: new Set(['new']), active: true }
       });
 
-    await updateSearch('/us\n44\nalias\nedited');
+    await updateSearch('/us\n44\nalias\nedited', CHAT_ID);
 
     expect(UpdateItemCommand).toHaveBeenCalledTimes(1);
+    expect(UpdateItemCommand).toHaveBeenCalledWith(expect.objectContaining({ Key: { searchId: '44', chatId: CHAT_ID } }));
     expect(marshall).toHaveBeenCalledWith({ ':VAL': 'edited' });
-    expect(botResponse).toHaveBeenCalledWith('search successfully updated');
-    expect(botResponseHTML).toHaveBeenCalledWith('<b>search</b>');
+    expect(botResponse).toHaveBeenCalledWith(CHAT_ID, 'search successfully updated');
+    expect(botResponseHTML).toHaveBeenCalledWith(CHAT_ID, '<b>search</b>');
   });
 
   it('deletes a search after validation and confirms deletion', async () => {
@@ -144,13 +164,14 @@ describe('db-crud.service', () => {
     const { validateSearch } = await import('../../../src/services/search-handler.service.js');
     const { deleteSearch } = await import('../../../src/services/db-crud.service.js');
 
-    __mocks.send.mockResolvedValueOnce({ Items: [{ searchId: '88' }] }).mockResolvedValueOnce({});
+    __mocks.send.mockResolvedValueOnce({ Items: [{ searchId: '88', chatId: CHAT_ID }] }).mockResolvedValueOnce({});
 
-    await deleteSearch('/ds\n88');
+    await deleteSearch('/ds\n88', CHAT_ID);
 
-    expect(validateSearch).toHaveBeenCalledWith('88', [{ searchId: '88' }]);
+    expect(validateSearch).toHaveBeenCalledWith('88', [{ searchId: '88', chatId: CHAT_ID }]);
     expect(DeleteItemCommand).toHaveBeenCalledTimes(1);
-    expect(botResponse).toHaveBeenCalledWith('Search successfully deleted');
+    expect(DeleteItemCommand).toHaveBeenCalledWith(expect.objectContaining({ Key: { searchId: '88', chatId: CHAT_ID } }));
+    expect(botResponse).toHaveBeenCalledWith(CHAT_ID, 'Search successfully deleted');
   });
 
   it('sends error response when listing searches fails', async () => {
@@ -160,9 +181,9 @@ describe('db-crud.service', () => {
 
     __mocks.send.mockRejectedValue(new Error('ddb down'));
 
-    await listSearches('/ls');
+    await listSearches('/ls', CHAT_ID);
 
-    expect(botResponse).toHaveBeenCalledWith(expect.stringContaining('Error getting the list of searches'));
+    expect(botResponse).toHaveBeenCalledWith(CHAT_ID, expect.stringContaining('Error getting the list of searches'));
   });
 
   it('lists all searches when activeOnly is not specified', async () => {
@@ -172,10 +193,10 @@ describe('db-crud.service', () => {
     const { listSearches } = await import('../../../src/services/db-crud.service.js');
 
     __mocks.send.mockResolvedValue({
-      Items: [{ active: true, alias: 's1' }, { active: false, alias: 's2' }]
+      Items: [{ active: true, alias: 's1', chatId: CHAT_ID }, { active: false, alias: 's2', chatId: CHAT_ID }]
     });
 
-    await listSearches('/ls');
+    await listSearches('/ls', CHAT_ID);
 
     expect(botResponseHTML).toHaveBeenCalledTimes(2);
     expect(formatSearchToHTML).toHaveBeenCalledTimes(2);
@@ -188,9 +209,9 @@ describe('db-crud.service', () => {
 
     __mocks.send.mockRejectedValue(new Error('put failed'));
 
-    await createNewSearch('/ns\nalias\nterm');
+    await createNewSearch('/ns\nalias\nterm', CHAT_ID);
 
-    expect(botResponse).toHaveBeenCalledWith(expect.stringContaining('Error adding new search'));
+    expect(botResponse).toHaveBeenCalledWith(CHAT_ID, expect.stringContaining('Error adding new search'));
   });
 
   it('sends error response when updating a search fails', async () => {
@@ -199,12 +220,12 @@ describe('db-crud.service', () => {
     const { updateSearch } = await import('../../../src/services/db-crud.service.js');
 
     __mocks.send
-      .mockResolvedValueOnce({ Items: [{ searchId: '44' }] })
+      .mockResolvedValueOnce({ Items: [{ searchId: '44', chatId: CHAT_ID }] })
       .mockRejectedValueOnce(new Error('update failed'));
 
-    await updateSearch('/us\n44\nalias\nnew-name');
+    await updateSearch('/us\n44\nalias\nnew-name', CHAT_ID);
 
-    expect(botResponse).toHaveBeenCalledWith(expect.stringContaining('Error updating search'));
+    expect(botResponse).toHaveBeenCalledWith(CHAT_ID, expect.stringContaining('Error updating search'));
   });
 
   it('sends error response when deleting a search fails', async () => {
@@ -213,11 +234,11 @@ describe('db-crud.service', () => {
     const { deleteSearch } = await import('../../../src/services/db-crud.service.js');
 
     __mocks.send
-      .mockResolvedValueOnce({ Items: [{ searchId: '88' }] })
+      .mockResolvedValueOnce({ Items: [{ searchId: '88', chatId: CHAT_ID }] })
       .mockRejectedValueOnce(new Error('delete failed'));
 
-    await deleteSearch('/ds\n88');
+    await deleteSearch('/ds\n88', CHAT_ID);
 
-    expect(botResponse).toHaveBeenCalledWith(expect.stringContaining('Error deleting search'));
+    expect(botResponse).toHaveBeenCalledWith(CHAT_ID, expect.stringContaining('Error deleting search'));
   });
 });

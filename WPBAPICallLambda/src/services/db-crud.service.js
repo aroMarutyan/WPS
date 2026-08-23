@@ -16,15 +16,15 @@ export async function getSearches() {
   }
 }
 
-export async function updateSearchData(searchId, newestResult) {
-  await updateSearchStringKey(searchId, 'newestOffer', remapOffer(newestResult));
+export async function updateSearchData(searchId, chatId, newestResult) {
+  await updateSearchStringKey(searchId, chatId, 'newestOffer', remapOffer(newestResult));
 }
 
-async function updateSearchStringKey(searchId, key, value) {
+async function updateSearchStringKey(searchId, chatId, key, value) {
   try {
     const searchToEdit = {
       TableName: TABLE_NAME,
-      Key: marshall({ searchId: searchId }),
+      Key: marshall({ searchId: searchId, chatId: chatId }),
       ExpressionAttributeNames: { '#KEY': `${key}` },
       ExpressionAttributeValues: marshall({ ':VAL': value }),
       ReturnValues: 'ALL_NEW',

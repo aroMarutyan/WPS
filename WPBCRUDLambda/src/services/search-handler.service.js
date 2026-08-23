@@ -10,10 +10,10 @@ export function getTableName() {
   }
 }
 
-export function getSearchParams(searchId) {
+export function getSearchParams(searchId, chatId) {
   return {
     ...getTableName(),
-    Key: marshall({ searchId: searchId })
+    Key: marshall({ searchId: searchId, chatId: chatId })
   }
 }
 

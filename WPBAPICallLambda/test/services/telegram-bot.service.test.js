@@ -14,18 +14,17 @@ describe('telegram-bot-service', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     process.env.TOKEN = 'token';
-    process.env.CHAT_ID = 'chat-id';
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('sends plain and HTML responses to configured chat', async () => {
+  it('sends plain and HTML responses to the given chat id', async () => {
     const { botResponse, botResponseHTML } = await import('../../src/services/telegram-bot.service.js');
 
-    await botResponse('plain text');
-    await botResponseHTML('html text');
+    await botResponse('chat-id', 'plain text');
+    await botResponseHTML('chat-id', 'html text');
 
     expect(sendMessage).toHaveBeenNthCalledWith(1, 'chat-id', 'plain text');
     expect(sendMessage).toHaveBeenNthCalledWith(2, 'chat-id', 'html text', { parse_mode: 'HTML' });
@@ -55,13 +54,15 @@ describe('telegram-bot-service', () => {
       }
     ];
 
-    const sendPromise = sendResultsToTelegram(results);
+    const sendPromise = sendResultsToTelegram('chat-id', results);
     await vi.runAllTimersAsync();
     await sendPromise;
 
     expect(sendMessage).toHaveBeenCalledTimes(2);
+    expect(sendMessage.mock.calls[0][0]).toBe('chat-id');
     expect(sendMessage.mock.calls[0][1]).toContain('<b>TITLE:</b> Bike 1');
     expect(sendMessage.mock.calls[0][1]).toContain("<a href='https://es.wallapop.com/item/offer-1'>CLICK</a>");
+    expect(sendMessage.mock.calls[1][0]).toBe('chat-id');
     expect(sendMessage.mock.calls[1][1]).toContain("<a href='med-2'>");
     expect(sendMessage.mock.calls[1][2]).toEqual({ parse_mode: 'HTML' });
   });
