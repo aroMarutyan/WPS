@@ -12,6 +12,12 @@ vi.mock('../src/services/db-crud.service.js', () => ({
   deleteSearch: vi.fn()
 }));
 
+const CHAT_ID = 12345;
+
+function buildEvent(text) {
+  return { body: JSON.stringify({ message: { text, chat: { id: CHAT_ID } } }) };
+}
+
 describe('handler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -23,13 +29,13 @@ describe('handler', () => {
     ['/ns', 'createNewSearch'],
     ['/us', 'updateSearch'],
     ['/ds', 'deleteSearch']
-  ])('routes %s to %s', async (command, methodName) => {
+  ])('routes %s to %s with the chat id', async (command, methodName) => {
     const { handler } = await import('../index.js');
     const crudService = await import('../src/services/db-crud.service.js');
 
-    const response = await handler({ body: JSON.stringify({ message: { text: command } }) });
+    const response = await handler(buildEvent(command));
 
-    expect(crudService[methodName]).toHaveBeenCalledWith(command);
+    expect(crudService[methodName]).toHaveBeenCalledWith(command, CHAT_ID);
     expect(response).toEqual({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -41,18 +47,30 @@ describe('handler', () => {
     const { handler } = await import('../index.js');
     const { botResponse } = await import('../src/services/telegram-bot.service.js');
 
-    await handler({ body: JSON.stringify({ message: { text: '/help' } }) });
+    await handler(buildEvent('/help'));
 
     expect(botResponse).toHaveBeenCalledTimes(1);
-    expect(botResponse.mock.calls[0][0]).toContain('To check all searches');
+    expect(botResponse.mock.calls[0][0]).toBe(CHAT_ID);
+    expect(botResponse.mock.calls[0][1]).toContain('To check all searches');
   });
 
   it('responds with unrecognized command fallback', async () => {
     const { handler } = await import('../index.js');
     const { botResponse } = await import('../src/services/telegram-bot.service.js');
 
-    await handler({ body: JSON.stringify({ message: { text: '/unknown' } }) });
+    await handler(buildEvent('/unknown'));
 
-    expect(botResponse).toHaveBeenCalledWith('Unrecognized command. Type /help to get an overview of available commands');
+    expect(botResponse).toHaveBeenCalledWith(CHAT_ID, 'Unrecognized command. Type /help to get an overview of available commands');
+  });
+
+  it('scopes different chat ids independently', async () => {
+    const { handler } = await import('../index.js');
+    const crudService = await import('../src/services/db-crud.service.js');
+
+    await handler({ body: JSON.stringify({ message: { text: '/ls', chat: { id: 111 } } }) });
+    await handler({ body: JSON.stringify({ message: { text: '/ls', chat: { id: 222 } } }) });
+
+    expect(crudService.listSearches).toHaveBeenNthCalledWith(1, '/ls', 111);
+    expect(crudService.listSearches).toHaveBeenNthCalledWith(2, '/ls', 222);
   });
 });

@@ -71,9 +71,9 @@ describe('db-crud-service', () => {
       shipping: { user_allows_shipping: true }
     };
 
-    await updateSearchData('search-1', newestResult);
+    await updateSearchData('search-1', 'chat-1', newestResult);
 
-    expect(marshall).toHaveBeenCalledWith({ searchId: 'search-1' });
+    expect(marshall).toHaveBeenCalledWith({ searchId: 'search-1', chatId: 'chat-1' });
     expect(marshall).toHaveBeenCalledWith({
       ':VAL': {
         imageUrl: 'medium-image',
@@ -118,6 +118,6 @@ describe('db-crud-service', () => {
       shipping: { user_allows_shipping: false }
     };
 
-    await expect(updateSearchData('s1', newestResult)).rejects.toThrow('update failed');
+    await expect(updateSearchData('s1', 'chat-1', newestResult)).rejects.toThrow('update failed');
   });
 });

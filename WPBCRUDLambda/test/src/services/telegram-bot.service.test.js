@@ -13,17 +13,26 @@ describe('telegram-bot.service', () => {
     vi.resetModules();
     vi.clearAllMocks();
     process.env.TOKEN = 'token';
-    process.env.CHAT_ID = 'chat-id';
   });
 
-  it('sends plain and html responses to the configured chat id', async () => {
+  it('sends plain and html responses to the given chat id', async () => {
     const { botResponse, botResponseHTML } = await import('../../../src/services/telegram-bot.service.js');
 
-    await botResponse('hello');
-    await botResponseHTML('html-message');
+    await botResponse('chat-id', 'hello');
+    await botResponseHTML('chat-id', 'html-message');
 
     expect(sendMessage).toHaveBeenNthCalledWith(1, 'chat-id', 'hello');
     expect(sendMessage).toHaveBeenNthCalledWith(2, 'chat-id', 'html-message', { parse_mode: 'HTML' });
+  });
+
+  it('routes plain and html responses to different chat ids independently', async () => {
+    const { botResponse, botResponseHTML } = await import('../../../src/services/telegram-bot.service.js');
+
+    await botResponse('chat-a', 'hello a');
+    await botResponseHTML('chat-b', 'hello b');
+
+    expect(sendMessage).toHaveBeenNthCalledWith(1, 'chat-a', 'hello a');
+    expect(sendMessage).toHaveBeenNthCalledWith(2, 'chat-b', 'hello b', { parse_mode: 'HTML' });
   });
 
   it('builds telegram response payload from offer details', async () => {

@@ -28,15 +28,15 @@ describe('handler', () => {
 
   it('processes only active searches and returns a successful response', async () => {
     getSearches.mockResolvedValue([
-      { searchId: 'active-1', alias: 'a', active: true },
-      { searchId: 'inactive-1', alias: 'b', active: false }
+      { searchId: 'active-1', chatId: 'chat-1', alias: 'a', active: true },
+      { searchId: 'inactive-1', chatId: 'chat-1', alias: 'b', active: false }
     ]);
     firstCall.mockResolvedValue([]);
 
     const response = await handler();
 
     expect(firstCall).toHaveBeenCalledTimes(1);
-    expect(firstCall).toHaveBeenCalledWith({ searchId: 'active-1', alias: 'a', active: true });
+    expect(firstCall).toHaveBeenCalledWith({ searchId: 'active-1', chatId: 'chat-1', alias: 'a', active: true });
     expect(updateSearchData).not.toHaveBeenCalled();
     expect(sendResultsToTelegram).not.toHaveBeenCalled();
     expect(displayCurrentInstanceErrors).toHaveBeenCalledTimes(1);
@@ -51,6 +51,7 @@ describe('handler', () => {
     getSearches.mockResolvedValue([
       {
         searchId: 'active-2',
+        chatId: 'chat-2',
         alias: 'search-2',
         active: true,
         newestOffer: { offerId: 'known-offer', modified: 100 }
@@ -73,17 +74,20 @@ describe('handler', () => {
     expect(updateSearchData).toHaveBeenCalledTimes(1);
     const updateArgs = updateSearchData.mock.calls[0];
     expect(updateArgs[0]).toBe('active-2');
-    expect(updateArgs[1].id).toBe('offer-7');
+    expect(updateArgs[1]).toBe('chat-2');
+    expect(updateArgs[2].id).toBe('offer-7');
 
     expect(sendResultsToTelegram).toHaveBeenCalledTimes(1);
-    const sentResults = sendResultsToTelegram.mock.calls[0][0];
-    expect(sentResults.map(item => item.id)).toEqual(['offer-7', 'offer-4', 'offer-5', 'offer-2', 'offer-6']);
+    const sendArgs = sendResultsToTelegram.mock.calls[0];
+    expect(sendArgs[0]).toBe('chat-2');
+    expect(sendArgs[1].map(item => item.id)).toEqual(['offer-7', 'offer-4', 'offer-5', 'offer-2', 'offer-6']);
   });
 
   it('returns only the first result when newestOfferId is not found in results', async () => {
     getSearches.mockResolvedValue([
       {
         searchId: 'active-3',
+        chatId: 'chat-3',
         alias: 'search-3',
         active: true,
         newestOffer: { offerId: 'missing-offer', modified: 50 }
@@ -98,16 +102,19 @@ describe('handler', () => {
     await handler();
 
     expect(updateSearchData).toHaveBeenCalledTimes(1);
-    expect(updateSearchData.mock.calls[0][1].id).toBe('new-offer-1');
+    expect(updateSearchData.mock.calls[0][1]).toBe('chat-3');
+    expect(updateSearchData.mock.calls[0][2].id).toBe('new-offer-1');
 
     expect(sendResultsToTelegram).toHaveBeenCalledTimes(1);
-    expect(sendResultsToTelegram.mock.calls[0][0]).toEqual([{ id: 'new-offer-1', modified_at: 200 }]);
+    expect(sendResultsToTelegram.mock.calls[0][0]).toBe('chat-3');
+    expect(sendResultsToTelegram.mock.calls[0][1]).toEqual([{ id: 'new-offer-1', modified_at: 200 }]);
   });
 
   it('does not send results when all items are older than or equal to the last modified date', async () => {
     getSearches.mockResolvedValue([
       {
         searchId: 'active-4',
+        chatId: 'chat-4',
         alias: 'search-4',
         active: true,
         newestOffer: { offerId: 'known-offer', modified: 500 }
@@ -127,7 +134,7 @@ describe('handler', () => {
 
   it('updates and sends when search has no prior newestOffer', async () => {
     getSearches.mockResolvedValue([
-      { searchId: 'new-search', alias: 'first-time', active: true }
+      { searchId: 'new-search', chatId: 'chat-5', alias: 'first-time', active: true }
     ]);
 
     firstCall.mockResolvedValue([
@@ -137,8 +144,25 @@ describe('handler', () => {
     await handler();
 
     expect(updateSearchData).toHaveBeenCalledTimes(1);
-    expect(updateSearchData.mock.calls[0][1].id).toBe('first-result');
+    expect(updateSearchData.mock.calls[0][1]).toBe('chat-5');
+    expect(updateSearchData.mock.calls[0][2].id).toBe('first-result');
     expect(sendResultsToTelegram).toHaveBeenCalledTimes(1);
-    expect(sendResultsToTelegram.mock.calls[0][0]).toEqual([{ id: 'first-result', modified_at: 100 }]);
+    expect(sendResultsToTelegram.mock.calls[0][0]).toBe('chat-5');
+    expect(sendResultsToTelegram.mock.calls[0][1]).toEqual([{ id: 'first-result', modified_at: 100 }]);
+  });
+
+  it('scopes results to each search\'s own chat id', async () => {
+    getSearches.mockResolvedValue([
+      { searchId: 's-a', chatId: 'chat-a', alias: 'a', active: true, newestOffer: { offerId: 'x', modified: 1 } },
+      { searchId: 's-b', chatId: 'chat-b', alias: 'b', active: true, newestOffer: { offerId: 'y', modified: 1 } }
+    ]);
+
+    firstCall.mockResolvedValueOnce([{ id: 'new-a', modified_at: 2 }]);
+    firstCall.mockResolvedValueOnce([{ id: 'new-b', modified_at: 2 }]);
+
+    await handler();
+
+    expect(sendResultsToTelegram).toHaveBeenNthCalledWith(1, 'chat-a', [{ id: 'new-a', modified_at: 2 }]);
+    expect(sendResultsToTelegram).toHaveBeenNthCalledWith(2, 'chat-b', [{ id: 'new-b', modified_at: 2 }]);
   });
 });

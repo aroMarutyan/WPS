@@ -16,11 +16,11 @@ describe('search-handler.service', () => {
     const { getTableName, getSearchParams } = await import('../../../src/services/search-handler.service.js');
 
     expect(getTableName()).toEqual({ TableName: 'search-table' });
-    expect(getSearchParams('101')).toEqual({
+    expect(getSearchParams('101', 'chat-1')).toEqual({
       TableName: 'search-table',
-      Key: { searchId: '101' }
+      Key: { searchId: '101', chatId: 'chat-1' }
     });
-    expect(marshall).toHaveBeenCalledWith({ searchId: '101' });
+    expect(marshall).toHaveBeenCalledWith({ searchId: '101', chatId: 'chat-1' });
   });
 
   it('maps new values for active, numeric and empty values', async () => {

@@ -1,21 +1,20 @@
 import TelegramBot from 'node-telegram-bot-api';
 
 const BOT = new TelegramBot(process.env.TOKEN);
-const CHAT_ID = process.env.CHAT_ID;
 
-export async function sendResultsToTelegram(newestResults) {
+export async function sendResultsToTelegram(chatId, newestResults) {
   for (const result of newestResults) {
-    await botResponseHTML(buildTelegramResponse(result));
+    await botResponseHTML(chatId, buildTelegramResponse(result));
     await asyncTimeout();
   }
 }
 
-export async function botResponse(text) {
-  await BOT.sendMessage(CHAT_ID, text);
+export async function botResponse(chatId, text) {
+  await BOT.sendMessage(chatId, text);
 }
 
-export async function botResponseHTML(text) {
-  await BOT.sendMessage(CHAT_ID, text, { parse_mode: 'HTML'});
+export async function botResponseHTML(chatId, text) {
+  await BOT.sendMessage(chatId, text, { parse_mode: 'HTML'});
 }
 
 async function asyncTimeout() {

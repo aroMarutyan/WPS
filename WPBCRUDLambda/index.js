@@ -2,34 +2,35 @@ import { botResponse } from './src/services/telegram-bot.service.js';
 import { listSearches, getNewestResults, createNewSearch, updateSearch, deleteSearch } from './src/services/db-crud.service.js';
 
 export const handler = async (event) => {
-  const text = JSON.parse(event.body).message.text;
+  const { message } = JSON.parse(event.body);
+  const { text, chat: { id: chatId } } = message;
   switch (true) {
     case text.startsWith('/ls'):
-      await listSearches(text);
+      await listSearches(text, chatId);
       break;
 
     case text.startsWith('/gl'):
-      await getNewestResults(text);
+      await getNewestResults(text, chatId);
       break;
 
     case text.startsWith('/ns'):
-      await createNewSearch(text);
+      await createNewSearch(text, chatId);
       break;
 
     case text.startsWith('/us'):
-      await updateSearch(text);
+      await updateSearch(text, chatId);
       break;
 
     case text.startsWith('/ds'):
-      await deleteSearch(text);
+      await deleteSearch(text, chatId);
       break;
 
     case text.startsWith('/help'):
-      await botResponse(helpText());
+      await botResponse(chatId, helpText());
       break;
 
     default:
-      await botResponse('Unrecognized command. Type /help to get an overview of available commands');
+      await botResponse(chatId, 'Unrecognized command. Type /help to get an overview of available commands');
   }
   return finalizeLambda();
 };
